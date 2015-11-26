@@ -38,6 +38,10 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.LinkedHashMap;
 import java.util.concurrent.TimeUnit;
+import com.amazonaws.ClientConfiguration;
+import com.amazonaws.auth.AWSCredentialsProvider;
+import hudson.ProxyConfiguration;
+import hudson.model.Hudson;
 
 /**
  * Class for interacting with CloudFormation stacks, including creating them,
@@ -249,12 +253,30 @@ public class CloudFormation {
     protected AmazonCloudFormation getAWSClient() {
         AWSCredentials credentials = new BasicAWSCredentials(this.awsAccessKey,
                 this.awsSecretKey);
+		Hudson hudson = Hudson.getInstance(); 
+		ProxyConfiguration proxyConfig = hudson != null ? hudson.proxy : null;
+		if (proxyConfig != null && proxyConfig.name != null) {
+			logger.println("use jenkins proxy configuration");
+	        ClientConfiguration config = new ClientConfiguration();
+	        config.setProxyHost(proxyConfig.name);
+	        config.setProxyPort(proxyConfig.port);
+	        config.setProxyUsername(proxyConfig.getUserName());
+	        config.setProxyPassword(proxyConfig.getPassword());
+	        config.setPreemptiveBasicProxyAuth(true);
+	        AWSCredentialsProvider provider = new BasicAWSCredentialsProvider(credentials);
+	        AmazonCloudFormation amazonClient = new AmazonCloudFormationAsyncClient(
+	        		provider, config);
+	
+	        amazonClient.setEndpoint(awsRegion.endPoint);
+	        return amazonClient;
+        } else {
+		logger.println("connect AWS directly");
         AmazonCloudFormation amazonClient = new AmazonCloudFormationAsyncClient(
                 credentials);
         amazonClient.setEndpoint(awsRegion.endPoint);
         return amazonClient;
     }
-
+	}
     private boolean waitForStackToBeDeleted() {
         int retries = 1;
         while (true) {
@@ -520,4 +542,22 @@ public class CloudFormation {
         }
         return false;
     }
+}
+
+class BasicAWSCredentialsProvider implements AWSCredentialsProvider {
+	
+	AWSCredentials awsCredentials;
+	
+	public BasicAWSCredentialsProvider(AWSCredentials awsCredentials) {
+		this.awsCredentials = awsCredentials;
+	}
+	
+	public AWSCredentials getCredentials() {
+		return awsCredentials;
+	}
+	
+	public void refresh() {
+		
+	}
+	
 }
